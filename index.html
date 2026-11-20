@@ -1,1 +1,205 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shivam Polyclinic</title>
+<style>
+body{font-family:Arial,sans-serif;background:#f1f5f9;margin:0;padding:15px;color:#222}
+.container{max-width:900px;margin:auto}
+header{text-align:center;background:#087e8b;color:white;padding:18px;border-radius:10px}
+h1{margin:5px;font-size:26px}
+.card{background:white;padding:16px;margin-top:15px;border-radius:10px;box-shadow:0 2px 8px #ddd}
+input,select{padding:10px;border:1px solid #bbb;border-radius:5px;width:100%;box-sizing:border-box;margin:5px 0}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+button{padding:11px 16px;border:0;border-radius:5px;background:#087e8b;color:white;cursor:pointer;margin:5px}
+.delete{background:#c62828}
+.green{background:#168342}
+table{width:100%;border-collapse:collapse;margin-top:12px}
+th,td{border:1px solid #ccc;padding:9px;text-align:left}
+h3{color:#087e8b}
+#receipt{display:none}
+@media(max-width:600px){.grid{grid-template-columns:1fr}}
+@media print{
+body{background:white;padding:0}
+body *{visibility:hidden}
+#receipt,#receipt *{visibility:visible}
+#receipt{display:block;position:absolute;left:0;top:0;width:100%;padding:15px;box-sizing:border-box}
+.no-print{display:none!important}
+}
+</style>
+</head>
+<body>
+<div class="container no-print">
+<header>
+<h1>SHIVAM POLYCLINIC</h1>
+<p>Patient Billing System</p>
+</header>
 
+<div class="card">
+<h3>Patient Details</h3>
+<div class="grid">
+<input id="name" placeholder="Patient Name">
+<input id="age" placeholder="Age">
+<select id="sex"><option value="">Select Sex</option><option>Male</option><option>Female</option><option>Other</option></select>
+<input id="address" placeholder="Add (Short Address)">
+<input id="mobile" placeholder="Mobile No">
+<input id="doctor" placeholder="Doctor Name">
+</div>
+</div>
+
+<div class="card">
+<h3>Bill Details</h3>
+<div class="grid">
+<input id="billdate" type="date">
+<input id="billno" placeholder="Bill No." readonly>
+</div>
+<h3>Services / Charges</h3>
+<div id="items"></div>
+<button type="button" onclick="addItem()">+ Add Service</button>
+<h3>Total: ₹ <span id="total">0</span></h3>
+<button class="green" onclick="makeBill()">Save & Print Bill</button>
+<button onclick="showHistory()">Billing History</button>
+</div>
+
+<div class="card" id="history" style="display:none">
+<h3>Billing History</h3>
+<div class="grid">
+<input type="month" id="month" onchange="showHistory()">
+<input id="search" placeholder="Search Patient" oninput="showHistory()">
+</div>
+<h3>Monthly Income: ₹ <span id="income">0</span></h3>
+<div id="historylist"></div>
+<button onclick="showHistory()">Refresh History</button>
+</div>
+</div>
+
+<div id="receipt">
+<h2 style="text-align:center">SHIVAM POLYCLINIC</h2>
+<p style="text-align:center">Patient Bill / Receipt</p>
+<hr>
+<div id="receiptDetails"></div>
+<table>
+<thead><tr><th>Service</th><th>Amount (₹)</th></tr></thead>
+<tbody id="receiptItems"></tbody>
+</table>
+<h3 style="text-align:right">Total: ₹ <span id="receiptTotal"></span></h3>
+<p style="text-align:right;margin-top:50px">Authorized Signature</p>
+</div>
+
+<script>
+let records=JSON.parse(localStorage.getItem("shivamBills")||"[]");
+
+function today(){
+ return new Date().toISOString().slice(0,10);
+}
+document.getElementById("billdate").value=today();
+
+function nextBill(){
+ let n=Number(localStorage.getItem("shivamBillNo")||0)+1;
+ document.getElementById("billno").value="SP-"+String(n).padStart(4,"0");
+}
+nextBill();
+
+function addItem(){
+ let div=document.createElement("div");
+ div.className="grid service";
+ div.innerHTML=`
+ <input class="serviceName" placeholder="Service Name">
+ <input class="amount" type="number" min="0" placeholder="Amount ₹" oninput="calculate()">
+ `;
+ document.getElementById("items").appendChild(div);
+}
+addItem();
+
+function calculate(){
+ let sum=0;
+ document.querySelectorAll(".amount").forEach(x=>sum+=Number(x.value)||0);
+ document.getElementById("total").textContent=sum;
+}
+
+function makeBill(){
+ let name=document.getElementById("name").value.trim();
+ if(!name){alert("Patient Name भरिए");return;}
+
+ let services=[];
+ document.querySelectorAll(".service").forEach(row=>{
+  let s=row.querySelector(".serviceName").value.trim();
+  let a=Number(row.querySelector(".amount").value)||0;
+  if(s && a>0)services.push({name:s,amount:a});
+ });
+ if(!services.length){alert("कम से कम एक Service और Amount भरिए");return;}
+
+ let bill={
+  no:document.getElementById("billno").value,
+  date:document.getElementById("billdate").value,
+  name:name,
+  age:document.getElementById("age").value,
+  sex:document.getElementById("sex").value,
+  address:document.getElementById("address").value,
+  mobile:document.getElementById("mobile").value,
+  doctor:document.getElementById("doctor").value,
+  services:services,
+  total:services.reduce((s,x)=>s+x.amount,0)
+ };
+
+ records.push(bill);
+ localStorage.setItem("shivamBills",JSON.stringify(records));
+ let current=Number(localStorage.getItem("shivamBillNo")||0)+1;
+ localStorage.setItem("shivamBillNo",current);
+
+ const d=document.getElementById("receiptDetails");
+ d.innerHTML="";
+ [
+  ["Bill No.",bill.no],["Date",bill.date],
+  ["Patient Name",bill.name],["Age",bill.age],
+  ["Sex",bill.sex],["Add",bill.address],
+  ["Mobile No.",bill.mobile],["Doctor Name",bill.doctor]
+ ].forEach(([k,v])=>{
+  if(v){
+   let p=document.createElement("p");
+   p.textContent=k+": "+v;
+   d.appendChild(p);
+  }
+ });
+
+ let tbody=document.getElementById("receiptItems");
+ tbody.innerHTML="";
+ bill.services.forEach(s=>{
+  let tr=document.createElement("tr");
+  let td1=document.createElement("td");
+  let td2=document.createElement("td");
+  td1.textContent=s.name;
+  td2.textContent=s.amount;
+  tr.append(td1,td2);
+  tbody.appendChild(tr);
+ });
+ document.getElementById("receiptTotal").textContent=bill.total;
+ window.print();
+ nextBill();
+ alert("Bill History में सेव हो गया है।");
+}
+
+function showHistory(){
+ document.getElementById("history").style.display="block";
+ let month=document.getElementById("month").value;
+ let search=document.getElementById("search").value.toLowerCase();
+ let list=records.filter(b=>
+  (!month||b.date.startsWith(month)) &&
+  b.name.toLowerCase().includes(search)
+ );
+ let total=list.reduce((s,b)=>s+b.total,0);
+ document.getElementById("income").textContent=total;
+ let html="<table><tr><th>Bill No.</th><th>Date</th><th>Patient</th><th>Amount</th></tr>";
+ list.slice().reverse().forEach(b=>{
+  html+=`<tr><td>${safe(b.no)}</td><td>${safe(b.date)}</td><td>${safe(b.name)}</td><td>₹${b.total}</td></tr>`;
+ });
+ html+="</table>";
+ document.getElementById("historylist").innerHTML=html;
+}
+function safe(v){
+ return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+</script>
+</body>
+</html>
